@@ -1,0 +1,72 @@
+"""REST API适配器"""
+
+from typing import List, Optional, Dict, Any
+import httpx
+
+from aps.adapters.base import BaseAdapter, DataConfig
+from aps.models.order import Order, Product, ProductType
+from aps.models.machine import ProductionLine
+from aps.models.schedule import ScheduleResult
+
+
+class RESTAdapter(BaseAdapter):
+    """REST API适配器"""
+
+    def __init__(self, config: DataConfig):
+        super().__init__(config)
+        self.client = httpx.Client(
+            base_url=config.api_url,
+            timeout=config.timeout,
+            headers={"Authorization": f"Bearer {config.api_key}"}
+            if config.api_key
+            else {},
+        )
+
+    def get_orders(self, filter: Optional[Dict[str, Any]] = None) -> List[Order]:
+        try:
+            response = self.client.get("/orders", params=filter or {})
+            response.raise_for_status()
+            data = response.json()
+            return [self._parse_order(item) for item in data.get("items", [])]
+        except httpx.HTTPError:
+            return []
+
+    def get_machines(
+        self, filter: Optional[Dict[str, Any]] = None
+    ) -> List[ProductionLine]:
+        try:
+            response = self.client.get("/machines", params=filter or {})
+            response.raise_for_status()
+            data = response.json()
+            return [self._parse_machine(item) for item in data.get("items", [])]
+        except httpx.HTTPError:
+            return []
+
+    def push_schedule(self, result: ScheduleResult) -> bool:
+        try:
+            response = self.client.post("/schedules", json=result.model_dump())
+            response.raise_for_status()
+            return True
+        except httpx.HTTPError:
+            return False
+
+    def _parse_order(self, data: Dict[str, Any]) -> Order:
+        return Order(
+            id=data.get("id") or data.get("job_id"),
+            product=Product(
+                name=data.get("product", ""), product_type=ProductType.COLA
+            ),
+            quantity=data.get("quantity", 0),
+            due_date=data.get("due_date", 72.0),
+        )
+
+    def _parse_machine(self, data: Dict[str, Any]) -> ProductionLine:
+        return ProductionLine(
+            id=data.get("id") or data.get("machine_id"),
+            name=data.get("name", ""),
+            capacity_per_hour=data.get("capacity_per_hour", 1000),
+        )
+
+    def __del__(self):
+        if hasattr(self, "client"):
+            self.client.close()
