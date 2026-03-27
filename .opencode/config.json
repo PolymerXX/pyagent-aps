@@ -1,0 +1,11 @@
+{
+  "skills": [
+    "building-pydantic-ai-agents",
+    "logfire-instrumentation", 
+    "hindsight-memory"
+  ],
+  "env": {
+    "HINDSIGHT_API_URL": "http://localhost:8888",
+    "HINDSIGHT_BANK_ID": "user-default"
+  }
+}
