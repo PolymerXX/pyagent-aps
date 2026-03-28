@@ -1,6 +1,7 @@
 """基础Agent配置"""
 
-from typing import Optional
+from typing import Any
+
 from pydantic import BaseModel
 from pydantic_ai import Agent
 from pydantic_ai.models.openrouter import OpenRouterModelSettings
@@ -9,9 +10,9 @@ from aps.core.config import get_settings
 
 
 def create_model_settings(
-    temperature: Optional[float] = None,
-    max_tokens: Optional[int] = None,
-    top_p: Optional[float] = None,
+    temperature: float | None = None,
+    max_tokens: int | None = None,
+    top_p: float | None = None,
 ) -> OpenRouterModelSettings:
     """创建OpenRouter模型设置"""
     settings = get_settings()
@@ -32,8 +33,8 @@ class AgentContext(BaseModel):
     orders_info: str = ""
     machines_info: str = ""
     constraints_info: str = ""
-    optimization_params: Optional[dict] = None
-    schedule_result: Optional[dict] = None
+    optimization_params: dict | None = None
+    schedule_result: dict | None = None
 
     class Config:
         arbitrary_types_allowed = True
@@ -44,8 +45,8 @@ class BaseAPSAgent:
 
     def __init__(
         self,
-        model: Optional[str] = None,
-        settings: Optional[OpenRouterModelSettings] = None,
+        model: str | None = None,
+        settings: OpenRouterModelSettings | None = None,
         instructions: str = "",
         output_type: type = str,
     ):
@@ -54,7 +55,7 @@ class BaseAPSAgent:
         self.settings = settings or DEFAULT_SETTINGS
         self.instructions = instructions
         self.output_type = output_type
-        self._agent: Optional[Agent] = None
+        self._agent: Agent | None = None
 
     @property
     def agent(self) -> Agent:
@@ -68,7 +69,9 @@ class BaseAPSAgent:
             )
         return self._agent
 
-    async def run(self, user_input: str, context: Optional[AgentContext] = None):
+    async def run(
+        self, user_input: str, context: AgentContext | None = None
+    ) -> Any:
         """运行Agent"""
         if context:
             prompt = self._build_prompt(user_input, context)
@@ -76,7 +79,7 @@ class BaseAPSAgent:
             prompt = user_input
 
         result = await self.agent.run(prompt)
-        return result.value
+        return result.output
 
     def _build_prompt(self, user_input: str, context: AgentContext) -> str:
         """构建包含上下文的提示"""
@@ -101,7 +104,7 @@ class BaseAPSAgent:
 
         return "\n\n".join(parts)
 
-    def run_sync(self, user_input: str, context: Optional[AgentContext] = None):
+    def run_sync(self, user_input: str, context: AgentContext | None = None) -> Any:
         """同步运行Agent"""
         if context:
             prompt = self._build_prompt(user_input, context)
@@ -109,4 +112,4 @@ class BaseAPSAgent:
             prompt = user_input
 
         result = self.agent.run_sync(prompt)
-        return result.data
+        return result.output

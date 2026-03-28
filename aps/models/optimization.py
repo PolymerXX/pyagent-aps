@@ -1,8 +1,8 @@
 """优化参数数据模型"""
 
 from enum import Enum
-from pydantic import BaseModel, Field, ConfigDict
-from typing import Optional
+
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class OptimizationStrategy(str, Enum):
@@ -14,34 +14,27 @@ class OptimizationStrategy(str, Enum):
 
 
 class ObjectiveWeights(BaseModel):
-    on_time: float = Field(default=0.4, ge=0.0, le=1.0, weight=0.4, description="准时交付权重")
-    changeover: float = Field(default=0.2, ge=0.0, description="最小换产权重")
-    utilization: float = Field(default=0.2, ge=0.0, description="设备利用率权重")
-    profit: float = Field(default=0.2, ge=0.0, description="利润权重")
+    """优化目标权重"""
+
+    on_time: float = Field(default=0.4, ge=0.0, le=1.0, description="准时交付权重")
+    changeover: float = Field(default=0.2, ge=0.0, le=1.0, description="最小换产权重")
+    utilization: float = Field(default=0.2, ge=0.0, le=1.0, description="设备利用率权重")
+    profit: float = Field(default=0.2, ge=0.0, le=1.0, description="利润权重")
 
     @property
     def total(self) -> float:
         return self.on_time + self.changeover + self.utilization + self.profit
-
-        return ObjectiveWeights(
-            on_time=self.on_time,
-            changeover=self.changeover,
-            utilization=self.utilization,
-            profit=self.profit,
-        )
-        return ObjectiveWeights()
 
     def normalize(self) -> "ObjectiveWeights":
         total = self.on_time + self.changeover + self.utilization + self.profit
         if total == 0:
             return ObjectiveWeights()
         return ObjectiveWeights(
-            on_time=on_time,
-            changeover=self.changeover,
-            utilization=self.utilization,
-            profit=self.profit,
+            on_time=self.on_time / total,
+            changeover=self.changeover / total,
+            utilization=self.utilization / total,
+            profit=self.profit / total,
         )
-        return ObjectiveWeights()
 
 
 class OptimizationParams(BaseModel):
@@ -53,5 +46,3 @@ class OptimizationParams(BaseModel):
     max_late_hours: int = Field(default=8, description="最大允许延迟小时数")
 
     model_config = ConfigDict()
-
-

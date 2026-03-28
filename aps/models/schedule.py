@@ -1,8 +1,8 @@
 """排程结果数据模型"""
 
 from enum import Enum
-from pydantic import BaseModel, Field, ConfigDict
-from typing import List, Optional
+
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class TaskStatus(str, Enum):
@@ -32,23 +32,23 @@ class TaskAssignment(BaseModel):
 class ScheduleExplanation(BaseModel):
     """排程解释"""
     summary: str = Field(default="", description="排程摘要")
-    key_decisions: List[str] = Field(default_factory=list, description="关键决策")
-    risks: List[str] = Field(default_factory=list, description="风险提示")
-    alternatives: List[str] = Field(default_factory=list, description="备选方案")
+    key_decisions: list[str] = Field(default_factory=list, description="关键决策")
+    risks: list[str] = Field(default_factory=list, description="风险提示")
+    alternatives: list[str] = Field(default_factory=list, description="备选方案")
 
 
 class ScheduleResult(BaseModel):
     """排程结果"""
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    assignments: List[TaskAssignment] = Field(default_factory=list, description="任务分配列表")
+    assignments: list[TaskAssignment] = Field(default_factory=list, description="任务分配列表")
     total_makespan: float = Field(default=0.0, description="总完工时间（小时）")
     on_time_delivery_rate: float = Field(default=1.0, ge=0.0, le=1.0, description="准时交付率")
     total_changeover_time: float = Field(default=0.0, description="总换产时间（小时）")
     machine_utilization: dict = Field(default_factory=dict, description="机器利用率")
     planning_time_seconds: float = Field(default=0.0, description="规划耗时（秒）")
     is_optimal: bool = Field(default=False, description="是否最优解")
-    explanation: Optional[ScheduleExplanation] = Field(default=None, description="排程解释")
+    explanation: ScheduleExplanation | None = Field(default=None, description="排程解释")
 
     @property
     def task_count(self) -> int:
@@ -65,11 +65,11 @@ class ScheduleResult(BaseModel):
         """延期任务数量"""
         return sum(1 for a in self.assignments if not a.is_on_time)
 
-    def get_assignments_by_machine(self, machine_id: str) -> List[TaskAssignment]:
+    def get_assignments_by_machine(self, machine_id: str) -> list[TaskAssignment]:
         """获取指定机器的任务分配"""
         return [a for a in self.assignments if a.machine_id == machine_id]
 
-    def get_sorted_assignments(self) -> List[TaskAssignment]:
+    def get_sorted_assignments(self) -> list[TaskAssignment]:
         """获取按开始时间排序的任务分配"""
         return sorted(self.assignments, key=lambda a: a.start_time)
 

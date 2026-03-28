@@ -11,24 +11,23 @@
 """
 
 from enum import Enum
-from typing import List, Optional
+
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent
-from pydantic_ai.models.openrouter import OpenRouterModelSettings
 
-from aps.core.config import get_settings, Settings
-from aps.models.order import Order
-from aps.models.machine import ProductionLine
-from aps.models.constraint import ProductionConstraints
-from aps.models.schedule import ScheduleResult, ScheduleExplanation
-from aps.models.optimization import OptimizationParams, OptimizationStrategy
-from aps.agents.base import create_model_settings, AgentContext
+from aps.agents.adjuster import AdjusterAgent
+from aps.agents.base import AgentContext, create_model_settings
+from aps.agents.explainer import ExplainAgent
+from aps.agents.monitor import MonitorAgent, MonitorReport
 from aps.agents.planner import PlannerAgent, PlannerOutput
 from aps.agents.scheduler import SchedulerAgent
-from aps.agents.explainer import ExplainAgent
-from aps.agents.validator import ValidatorAgent, ValidationResult
-from aps.agents.adjuster import AdjusterAgent
-from aps.agents.monitor import MonitorAgent, MonitorReport
+from aps.agents.validator import ValidationResult, ValidatorAgent
+from aps.core.config import Settings, get_settings
+from aps.models.constraint import ProductionConstraints
+from aps.models.machine import ProductionLine
+from aps.models.optimization import OptimizationParams, OptimizationStrategy
+from aps.models.order import Order
+from aps.models.schedule import ScheduleExplanation, ScheduleResult
 
 
 class TaskType(str, Enum):
@@ -44,11 +43,11 @@ class OrchestratorResponse(BaseModel):
     """主控Agent响应"""
 
     user_intent: str = Field(..., description="用户意图分析")
-    required_tasks: List[TaskType] = Field(
+    required_tasks: list[TaskType] = Field(
         default_factory=lambda: [TaskType.PLAN, TaskType.SCHEDULE, TaskType.EXPLAIN],
         description="需要执行的任务序列",
     )
-    strategy_hint: Optional[str] = Field(
+    strategy_hint: str | None = Field(
         default=None, description="策略提示（如'优先交期'、'最小换产'）"
     )
 
@@ -58,10 +57,10 @@ class APSSystem:
 
     def __init__(
         self,
-        orders: List[Order],
-        machines: List[ProductionLine],
-        constraints: Optional[ProductionConstraints] = None,
-        settings: Optional[Settings] = None,
+        orders: list[Order],
+        machines: list[ProductionLine],
+        constraints: ProductionConstraints | None = None,
+        settings: Settings | None = None,
     ):
         self.orders = orders
         self.machines = machines
@@ -80,14 +79,14 @@ class APSSystem:
         self.monitor = MonitorAgent()
 
         # 结果缓存
-        self._last_params: Optional[OptimizationParams] = None
-        self._last_result: Optional[ScheduleResult] = None
-        self._last_validation: Optional[ValidationResult] = None
+        self._last_params: OptimizationParams | None = None
+        self._last_result: ScheduleResult | None = None
+        self._last_validation: ValidationResult | None = None
         self._adjustment_count: int = 0
         self._max_adjustments: int = 3
 
     async def process_request(
-        self, user_input: str, params: Optional[OptimizationParams] = None
+        self, user_input: str, params: OptimizationParams | None = None
     ) -> dict:
         """处理用户请求 - 完整的多Agent协作流程"""
 
@@ -214,7 +213,7 @@ class APSSystem:
             alternatives=self._generate_recommendations(result),
         )
 
-    def _generate_recommendations(self, result: ScheduleResult) -> List[str]:
+    def _generate_recommendations(self, result: ScheduleResult) -> list[str]:
         """生成优化建议"""
         recs = []
 
@@ -293,7 +292,7 @@ class APSSystem:
         return "\n".join(lines)
 
     def process_request_sync(
-        self, user_input: str, params: Optional[OptimizationParams] = None
+        self, user_input: str, params: OptimizationParams | None = None
     ) -> dict:
         """处理用户请求（同步版本）"""
         import asyncio
@@ -345,4 +344,4 @@ class OrchestratorAgent:
     async def run(self, user_input: str) -> OrchestratorResponse:
         """运行Agent"""
         result = await self.agent.run(user_input)
-        return result.data
+        return result.output

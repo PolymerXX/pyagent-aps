@@ -1,0 +1,9 @@
+# 仓库根目录脚本依赖；安装到与 APS 相同的解释器，例如：
+#   aps\.venv\Scripts\pip install -r requirements.txt
+#
+# Windows：不要 pip install hindsight-all。它会拉取 hindsight-api-slim[all] → uvloop，
+# 而 uvloop 不支持 Windows，会导致构建失败。写 Agent/客户端脚本请用下面两行即可。
+pydantic-ai>=0.0.10
+python-dotenv>=1.0
+hindsight-pydantic-ai>=0.4
+logfire>=3.0

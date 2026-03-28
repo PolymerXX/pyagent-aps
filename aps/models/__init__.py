@@ -1,23 +1,22 @@
 """Models module"""
 
-from aps.models.order import Order, Product, ProductType
-from aps.models.machine import ProductionLine, MachineStatus
 from aps.models.constraint import (
-    Constraint,
+    DEFAULT_CHANGEOVER_RULES,
     ChangeoverRule,
     ProductionConstraints,
-    DEFAULT_CHANGEOVER_RULES,
 )
-from aps.models.schedule import (
-    TaskAssignment,
-    TaskStatus,
-    ScheduleResult,
-    ScheduleExplanation,
-)
+from aps.models.machine import MachineStatus, ProductionLine
 from aps.models.optimization import (
+    ObjectiveWeights,
     OptimizationParams,
     OptimizationStrategy,
-    ObjectiveWeights,
+)
+from aps.models.order import Order, Product, ProductType
+from aps.models.schedule import (
+    ScheduleExplanation,
+    ScheduleResult,
+    TaskAssignment,
+    TaskStatus,
 )
 
 __all__ = [

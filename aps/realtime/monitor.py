@@ -1,7 +1,8 @@
 """实时监控处理器"""
 
-from typing import Optional, List, Dict, Any
 from datetime import datetime
+from typing import Any
+
 from pydantic import BaseModel, Field
 
 from aps.models.schedule import ScheduleResult
@@ -15,17 +16,17 @@ class MonitorAlert(BaseModel):
     severity: str = "info"
     message: str
     timestamp: datetime = Field(default_factory=datetime.now)
-    details: Dict[str, Any] = Field(default_factory=dict)
+    details: dict[str, Any] = Field(default_factory=dict)
 
 
 class RealtimeMonitor:
     """实时监控处理器"""
 
     def __init__(self):
-        self._alerts: List[MonitorAlert] = []
-        self._last_result: Optional[ScheduleResult] = None
+        self._alerts: list[MonitorAlert] = []
+        self._last_result: ScheduleResult | None = None
 
-    def monitor(self, result: ScheduleResult) -> List[MonitorAlert]:
+    def monitor(self, result: ScheduleResult) -> list[MonitorAlert]:
         """监控排程结果"""
         self._alerts = []
         self._last_result = result
@@ -80,7 +81,7 @@ class RealtimeMonitor:
                     )
                 )
 
-    def get_active_alerts(self, severity: Optional[str] = None) -> List[MonitorAlert]:
+    def get_active_alerts(self, severity: str | None = None) -> list[MonitorAlert]:
         """获取活跃告警"""
         if severity:
             return [a for a in self._alerts if a.severity == severity]

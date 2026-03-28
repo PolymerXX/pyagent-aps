@@ -1,13 +1,10 @@
 """解释Agent - 生成排程解释报告"""
 
-from typing import Optional, List
-from pydantic import BaseModel, Field
-from pydantic_ai import Agent
+from typing import cast
 
+from aps.agents.base import AgentContext, BaseAPSAgent, create_model_settings
 from aps.core.config import get_settings
-from aps.models.schedule import ScheduleExplanation, ScheduleResult
-from aps.models.optimization import OptimizationParams
-from aps.agents.base import create_model_settings, BaseAPSAgent, AgentContext
+from aps.models.schedule import ScheduleExplanation
 
 
 class ExplainAgent(BaseAPSAgent):
@@ -43,14 +40,14 @@ class ExplainAgent(BaseAPSAgent):
 """
 
     async def run(
-        self, user_input: str, context: Optional[AgentContext] = None
+        self, user_input: str, context: AgentContext | None = None
     ) -> ScheduleExplanation:
         """运行解释Agent"""
         prompt = self._build_prompt(user_input, context)
         result = await self.agent.run(prompt)
-        return result.data
+        return cast(ScheduleExplanation, result.output)
 
-    def _build_prompt(self, user_input: str, context: Optional[AgentContext]) -> str:
+    def _build_prompt(self, user_input: str, context: AgentContext | None) -> str:
         """构建提示"""
         parts = [f"## 用户请求\n{user_input}"]
 

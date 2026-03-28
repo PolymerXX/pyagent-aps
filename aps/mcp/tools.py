@@ -1,24 +1,21 @@
 """APS MCP核心工具函数"""
 
-import json
-from typing import Optional, List, Dict, Any
-from datetime import datetime
 import uuid
+from datetime import datetime
+from typing import Any
 
-from aps.mcp.registry import registry, ToolCategory, tool
-from aps.models.order import Order, Product, ProductType
-from aps.models.machine import ProductionLine
+from aps.engine.solver import APSSolver
+from aps.mcp.registry import ToolCategory, tool
 from aps.models.constraint import ProductionConstraints
+from aps.models.machine import ProductionLine
 from aps.models.optimization import (
+    ObjectiveWeights,
     OptimizationParams,
     OptimizationStrategy,
-    ObjectiveWeights,
 )
-from aps.models.schedule import ScheduleResult
-from aps.engine.solver import APSSolver
+from aps.models.order import Order, Product, ProductType
 
-
-_global_state: Dict[str, Any] = {
+_global_state: dict[str, Any] = {
     "orders": {},
     "machines": {},
     "constraints": None,
@@ -33,6 +30,14 @@ def _get_or_create_constraints() -> ProductionConstraints:
     return _global_state["constraints"]
 
 
+def _reset_state() -> None:
+    _global_state["orders"] = {}
+    _global_state["machines"] = {}
+    _global_state["constraints"] = None
+    _global_state["current_schedule"] = None
+    _global_state["schedule_history"] = []
+
+
 @tool(
     name="run_aps_schedule",
     description="执行APS排程优化",
@@ -40,14 +45,14 @@ def _get_or_create_constraints() -> ProductionConstraints:
 )
 def run_aps_schedule(
     strategy: str = "balanced",
-    orders_filter: Optional[List[str]] = None,
-    machines_filter: Optional[List[str]] = None,
+    orders_filter: list[str] | None = None,
+    machines_filter: list[str] | None = None,
     time_limit: int = 60,
     on_time_weight: float = 0.4,
     changeover_weight: float = 0.2,
     utilization_weight: float = 0.2,
     profit_weight: float = 0.2,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """执行APS排程"""
     orders = list(_global_state["orders"].values())
     machines = list(_global_state["machines"].values())
@@ -65,14 +70,14 @@ def run_aps_schedule(
         "on_time": OptimizationStrategy.ON_TIME_DELIVERY,
         "min_changeover": OptimizationStrategy.MINIMIZE_CHANGEOVER,
         "max_profit": OptimizationStrategy.MAXIMIZE_PROFIT,
-        "max_utilization": OptimizationStrategy.MAXIMIZE_UTILIZATION,
+        "max_utilization": OptimizationStrategy.MAX_UTILIZATION,
     }
 
     weights = ObjectiveWeights(
-        on_time_delivery=on_time_weight,
-        minimize_changeover=changeover_weight,
-        maximize_utilization=utilization_weight,
-        maximize_profit=profit_weight,
+        on_time=on_time_weight,
+        changeover=changeover_weight,
+        utilization=utilization_weight,
+        profit=profit_weight,
     )
 
     params = OptimizationParams(
@@ -108,7 +113,7 @@ def run_aps_schedule(
     description="获取排程状态",
     category=ToolCategory.SCHEDULING,
 )
-def get_schedule_status(schedule_id: Optional[str] = None) -> Dict[str, Any]:
+def get_schedule_status(schedule_id: str | None = None) -> dict[str, Any]:
     """获取排程状态"""
     if schedule_id:
         for schedule in _global_state["schedule_history"]:
@@ -129,17 +134,22 @@ def add_order(
     job_id: str,
     product: str,
     quantity: int,
-    due_in_hours: Optional[int] = None,
-) -> Dict[str, Any]:
+    due_in_hours: int | None = None,
+) -> dict[str, Any]:
     """添加订单"""
     if job_id in _global_state["orders"]:
         return {"error": f"订单 {job_id} 已存在", "status": "failed"}
 
     order = Order(
         id=job_id,
-        product=Product(name=product, product_type=ProductType.COLA),
+        product=Product(
+            id=f"mcp_{job_id}",
+            name=product,
+            product_type=ProductType.BEVERAGE,
+            production_rate=100.0,
+        ),
         quantity=quantity,
-        due_date=float(due_in_hours) if due_in_hours else 72.0,
+        due_date=due_in_hours if due_in_hours else 72,
     )
 
     _global_state["orders"][job_id] = order
@@ -151,7 +161,7 @@ def add_order(
     description="更新订单",
     category=ToolCategory.ORDER,
 )
-def update_order(job_id: str, **changes) -> Dict[str, Any]:
+def update_order(job_id: str, **changes) -> dict[str, Any]:
     """更新订单"""
     if job_id not in _global_state["orders"]:
         return {"error": f"订单 {job_id} 不存在", "status": "failed"}
@@ -160,7 +170,7 @@ def update_order(job_id: str, **changes) -> Dict[str, Any]:
     if "quantity" in changes:
         order.quantity = changes["quantity"]
     if "due_in_hours" in changes:
-        order.due_date = float(changes["due_in_hours"])
+        order.due_date = int(changes["due_in_hours"])
 
     return {"status": "success", "order_id": job_id}
 
@@ -170,7 +180,7 @@ def update_order(job_id: str, **changes) -> Dict[str, Any]:
     description="查询订单",
     category=ToolCategory.ORDER,
 )
-def get_orders() -> Dict[str, Any]:
+def get_orders() -> dict[str, Any]:
     """查询订单"""
     orders = []
     for order in _global_state["orders"].values():
@@ -190,7 +200,7 @@ def get_orders() -> Dict[str, Any]:
     description="删除订单",
     category=ToolCategory.ORDER,
 )
-def remove_order(job_id: str) -> Dict[str, Any]:
+def remove_order(job_id: str) -> dict[str, Any]:
     """删除订单"""
     if job_id not in _global_state["orders"]:
         return {"error": f"订单 {job_id} 不存在", "status": "failed"}
@@ -206,9 +216,9 @@ def remove_order(job_id: str) -> Dict[str, Any]:
 def add_machine(
     machine_id: str,
     capacity_per_hour: int,
-    supported_products: List[str],
-    name: Optional[str] = None,
-) -> Dict[str, Any]:
+    supported_products: list[str],
+    name: str | None = None,
+) -> dict[str, Any]:
     """添加机器"""
     if machine_id in _global_state["machines"]:
         return {"error": f"机器 {machine_id} 已存在", "status": "failed"}
@@ -228,7 +238,7 @@ def add_machine(
     description="查询机器",
     category=ToolCategory.MACHINE,
 )
-def get_machines() -> Dict[str, Any]:
+def get_machines() -> dict[str, Any]:
     """查询机器"""
     machines = []
     for m in _global_state["machines"].values():
@@ -247,7 +257,7 @@ def get_machines() -> Dict[str, Any]:
     description="更新机器状态",
     category=ToolCategory.MACHINE,
 )
-def update_machine_status(machine_id: str, status: str) -> Dict[str, Any]:
+def update_machine_status(machine_id: str, status: str) -> dict[str, Any]:
     """更新机器状态"""
     if machine_id not in _global_state["machines"]:
         return {"error": f"机器 {machine_id} 不存在", "status": "failed"}
@@ -259,7 +269,7 @@ def update_machine_status(machine_id: str, status: str) -> Dict[str, Any]:
     description="设置约束",
     category=ToolCategory.CONSTRAINT,
 )
-def set_constraints(constraints: List[dict]) -> Dict[str, Any]:
+def set_constraints(constraints: list[dict]) -> dict[str, Any]:
     """设置约束"""
     _global_state["constraints"] = ProductionConstraints()
     return {"status": "success", "count": len(constraints)}
@@ -270,7 +280,7 @@ def set_constraints(constraints: List[dict]) -> Dict[str, Any]:
     description="获取约束",
     category=ToolCategory.CONSTRAINT,
 )
-def get_constraints() -> Dict[str, Any]:
+def get_constraints() -> dict[str, Any]:
     """获取约束"""
     return {"status": "success", "constraints": []}
 
@@ -280,7 +290,7 @@ def get_constraints() -> Dict[str, Any]:
     description="解释排程",
     category=ToolCategory.RESULT,
 )
-def explain_schedule(schedule_id: Optional[str] = None) -> Dict[str, Any]:
+def explain_schedule(schedule_id: str | None = None) -> dict[str, Any]:
     """解释排程"""
     schedule = get_schedule_status(schedule_id)
     if "error" in schedule:
@@ -295,7 +305,7 @@ def explain_schedule(schedule_id: Optional[str] = None) -> Dict[str, Any]:
     description="验证排程",
     category=ToolCategory.RESULT,
 )
-def validate_schedule(schedule_id: Optional[str] = None) -> Dict[str, Any]:
+def validate_schedule(schedule_id: str | None = None) -> dict[str, Any]:
     """验证排程"""
     schedule = get_schedule_status(schedule_id)
     if "error" in schedule:

@@ -1,19 +1,20 @@
 """调整Agent - 处理实时变更"""
 
-from typing import Optional, List, Dict, Any
 from datetime import datetime
 from enum import Enum
+from typing import Any
+
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent
 
-from aps.core.config import get_settings
 from aps.agents.base import create_model_settings
-from aps.models.order import Order
-from aps.models.machine import ProductionLine
-from aps.models.schedule import ScheduleResult
-from aps.models.optimization import OptimizationParams
-from aps.engine.solver import APSSolver
 from aps.agents.validator import ValidationResult
+from aps.core.config import get_settings
+from aps.engine.solver import APSSolver
+from aps.models.machine import ProductionLine
+from aps.models.optimization import OptimizationParams
+from aps.models.order import Order
+from aps.models.schedule import ScheduleResult
 
 
 class AdjustmentType(str, Enum):
@@ -27,12 +28,12 @@ class Adjustment(BaseModel):
     """调整动作"""
 
     action_type: AdjustmentType = Field(..., description="调整类型")
-    affected_orders: List[str] = Field(
+    affected_orders: list[str] = Field(
         default_factory=list, description="受影响的订单ID"
     )
     reason: str = Field(..., description="调整原因")
-    new_schedule_id: Optional[str] = Field(None, description="新排程ID")
-    changes: Dict[str, Any] = Field(default_factory=dict, description="变更详情")
+    new_schedule_id: str | None = Field(None, description="新排程ID")
+    changes: dict[str, Any] = Field(default_factory=dict, description="变更详情")
     timestamp: datetime = Field(default_factory=datetime.now, description="时间戳")
 
 
@@ -69,17 +70,15 @@ class AdjusterAgent:
     async def handle_new_order(
         self,
         order: Order,
-        machines: List[ProductionLine],
-        existing_result: Optional[ScheduleResult] = None,
+        machines: list[ProductionLine],
+        orders: list[Order],
+        existing_result: ScheduleResult | None = None,
     ) -> Adjustment:
         """处理新订单"""
         params = OptimizationParams()
+        all_orders = orders + [order]
 
-        orders = [order]
-        if existing_result:
-            orders = list(existing_result.assignments) + [order]
-
-        result = await self._run_solver(orders, machines, params)
+        result = await self._run_solver(all_orders, machines, params)
 
         adjustment = Adjustment(
             action_type=AdjustmentType.NEW_ORDER,
@@ -92,7 +91,7 @@ class AdjusterAgent:
         return adjustment
 
     async def handle_machine_down(
-        self, machine_id: str, orders: List[Order], machines: List[ProductionLine]
+        self, machine_id: str, orders: list[Order], machines: list[ProductionLine]
     ) -> Adjustment:
         """处理机器故障"""
         available_machines = [m for m in machines if m.id != machine_id]
@@ -116,8 +115,8 @@ class AdjusterAgent:
         self,
         order_id: str,
         changes: dict,
-        orders: List[Order],
-        machines: List[ProductionLine],
+        orders: list[Order],
+        machines: list[ProductionLine],
     ) -> Adjustment:
         """处理订单变更"""
         params = OptimizationParams()
@@ -135,8 +134,8 @@ class AdjusterAgent:
 
     async def _run_solver(
         self,
-        orders: List[Order],
-        machines: List[ProductionLine],
+        orders: list[Order],
+        machines: list[ProductionLine],
         params: OptimizationParams,
     ) -> dict:
         """运行求解器"""
@@ -157,9 +156,9 @@ class AdjusterAgent:
         self,
         result: ScheduleResult,
         validation: ValidationResult,
-        orders: List[Order],
-        machines: List[ProductionLine],
-    ) -> Optional[Adjustment]:
+        orders: list[Order],
+        machines: list[ProductionLine],
+    ) -> Adjustment | None:
         """分析验证结果并调整"""
         if validation.is_valid:
             return None

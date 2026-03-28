@@ -1,11 +1,12 @@
 """REST API适配器"""
 
-from typing import List, Optional, Dict, Any
+from typing import Any
+
 import httpx
 
 from aps.adapters.base import BaseAdapter, DataConfig
-from aps.models.order import Order, Product, ProductType
 from aps.models.machine import ProductionLine
+from aps.models.order import Order, Product, ProductType
 from aps.models.schedule import ScheduleResult
 
 
@@ -22,7 +23,7 @@ class RESTAdapter(BaseAdapter):
             else {},
         )
 
-    def get_orders(self, filter: Optional[Dict[str, Any]] = None) -> List[Order]:
+    def get_orders(self, filter: dict[str, Any] | None = None) -> list[Order]:
         try:
             response = self.client.get("/orders", params=filter or {})
             response.raise_for_status()
@@ -32,8 +33,8 @@ class RESTAdapter(BaseAdapter):
             return []
 
     def get_machines(
-        self, filter: Optional[Dict[str, Any]] = None
-    ) -> List[ProductionLine]:
+        self, filter: dict[str, Any] | None = None
+    ) -> list[ProductionLine]:
         try:
             response = self.client.get("/machines", params=filter or {})
             response.raise_for_status()
@@ -50,7 +51,7 @@ class RESTAdapter(BaseAdapter):
         except httpx.HTTPError:
             return False
 
-    def _parse_order(self, data: Dict[str, Any]) -> Order:
+    def _parse_order(self, data: dict[str, Any]) -> Order:
         return Order(
             id=data.get("id") or data.get("job_id"),
             product=Product(
@@ -60,7 +61,7 @@ class RESTAdapter(BaseAdapter):
             due_date=data.get("due_date", 72.0),
         )
 
-    def _parse_machine(self, data: Dict[str, Any]) -> ProductionLine:
+    def _parse_machine(self, data: dict[str, Any]) -> ProductionLine:
         return ProductionLine(
             id=data.get("id") or data.get("machine_id"),
             name=data.get("name", ""),

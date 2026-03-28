@@ -1,37 +1,57 @@
 """规划Agent - 将用户请求转换为优化参数"""
 
-from typing import Optional, List
-from pydantic import BaseModel, Field
-from pydantic_ai import Agent
+from typing import cast
 
+from pydantic import BaseModel, Field
+
+from aps.agents.base import AgentContext, BaseAPSAgent, create_model_settings
 from aps.core.config import get_settings
 from aps.models.optimization import (
+    ObjectiveWeights,
     OptimizationParams,
     OptimizationStrategy,
-    ObjectiveWeights,
 )
-from aps.agents.base import create_model_settings, BaseAPSAgent, AgentContext
 
 
 class PlannerOutput(BaseModel):
-    """规划Agent输出"""
+    """规划Agent输出。
+
+    权重仅通过四个顶层标量字段表示。禁止输出名为 weights 的字段，禁止嵌套对象或 JSON 字符串；
+    否则工具参数校验会把错误的 weights 当作 ObjectiveWeights 而失败。
+    """
 
     strategy: OptimizationStrategy = Field(
         default=OptimizationStrategy.BALANCED, description="优化策略"
     )
-    weights: ObjectiveWeights = Field(
-        default_factory=ObjectiveWeights, description="目标权重"
+    on_time: float = Field(
+        default=0.4, ge=0.0, le=1.0, description="准时交付权重 on_time"
     )
+    changeover: float = Field(
+        default=0.2, ge=0.0, le=1.0, description="最小换产权重 changeover"
+    )
+    utilization: float = Field(
+        default=0.2, ge=0.0, le=1.0, description="设备利用率权重 utilization"
+    )
+    profit: float = Field(default=0.2, ge=0.0, le=1.0, description="利润权重 profit")
     time_limit_seconds: int = Field(default=60, description="求解时间限制")
     allow_delays: bool = Field(default=True, description="是否允许延期")
     max_delay_hours: float = Field(default=24.0, description="最大延期小时数")
-    priority_orders: List[str] = Field(
+    priority_orders: list[str] = Field(
         default_factory=list, description="优先处理的订单ID"
     )
-    frozen_assignments: List[str] = Field(
+    frozen_assignments: list[str] = Field(
         default_factory=list, description="冻结的分配（不调整）"
     )
     explanation: str = Field(default="", description="规划决策说明")
+
+    @property
+    def weights(self) -> ObjectiveWeights:
+        return ObjectiveWeights(
+            on_time=self.on_time,
+            changeover=self.changeover,
+            utilization=self.utilization,
+            profit=self.profit,
+        )
 
     def to_optimization_params(self) -> OptimizationParams:
         """转换为优化参数"""
@@ -39,8 +59,8 @@ class PlannerOutput(BaseModel):
             strategy=self.strategy,
             weights=self.weights,
             time_limit_seconds=self.time_limit_seconds,
-            allow_delays=self.allow_delays,
-            max_delay_hours=self.max_delay_hours,
+            allow_late_delivery=self.allow_delays,
+            max_late_hours=max(0, int(round(self.max_delay_hours))),
         )
 
 
@@ -71,24 +91,25 @@ class PlannerAgent(BaseAPSAgent):
 - 没有明确偏好 → BALANCED策略
 
 **设置权重**：
-根据用户偏好调整各目标的权重，确保权重总和为1.0。
+在输出里只填四个顶层数字字段 on_time、changeover、utilization、profit（范围 0–1），总和应为 1.0。
+不要输出 weights 字段，不要用嵌套对象或 JSON 字符串代替这四个数。
 
 **输出要求**：
-- strategy: 优化策略
-- weights: 目标权重
+- strategy: 优化策略枚举
+- on_time / changeover / utilization / profit: 四个权重数字
 - time_limit_seconds: 求解时间限制（通常60秒足够）
 - explanation: 简要说明决策理由
 """
 
     async def run(
-        self, user_input: str, context: Optional[AgentContext] = None
+        self, user_input: str, context: AgentContext | None = None
     ) -> PlannerOutput:
         """运行规划Agent"""
         prompt = self._build_prompt(user_input, context)
         result = await self.agent.run(prompt)
-        return result.data
+        return cast(PlannerOutput, result.output)
 
-    def _build_prompt(self, user_input: str, context: Optional[AgentContext]) -> str:
+    def _build_prompt(self, user_input: str, context: AgentContext | None) -> str:
         """构建提示"""
         parts = []
 

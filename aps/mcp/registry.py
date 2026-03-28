@@ -1,8 +1,9 @@
 """MCP工具注册器"""
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Callable, Any
 from enum import Enum
+from typing import Any, Optional
 
 
 class ToolCategory(str, Enum):
@@ -23,21 +24,24 @@ class ToolMetadata:
     description: str
     category: ToolCategory
     version: str = "1.0.0"
-    requires: List[str] = field(default_factory=list)
-    provides: List[str] = field(default_factory=list)
-    examples: List[Dict[str, Any]] = field(default_factory=list)
+    requires: list[str] = field(default_factory=list)
+    provides: list[str] = field(default_factory=list)
+    examples: list[dict[str, Any]] = field(default_factory=list)
 
 
 class MCPToolRegistry:
     """MCP工具注册表"""
 
     _instance: Optional["MCPToolRegistry"] = None
+    _tools: dict[str, ToolMetadata]
+    _handlers: dict[str, Callable[..., Any]]
 
     def __new__(cls) -> "MCPToolRegistry":
         if cls._instance is None:
-            cls._instance = super().__new__(cls)
-            cls._instance._tools: Dict[str, ToolMetadata] = {}
-            cls._instance._handlers: Dict[str, Callable] = {}
+            obj = super().__new__(cls)
+            obj._tools = {}
+            obj._handlers = {}
+            cls._instance = obj
         return cls._instance
 
     def register(
@@ -47,9 +51,9 @@ class MCPToolRegistry:
         category: ToolCategory,
         handler: Callable,
         version: str = "1.0.0",
-        requires: Optional[List[str]] = None,
-        provides: Optional[List[str]] = None,
-        examples: Optional[List[Dict[str, Any]]] = None,
+        requires: list[str] | None = None,
+        provides: list[str] | None = None,
+        examples: list[dict[str, Any]] | None = None,
     ) -> None:
         """注册工具"""
         self._tools[name] = ToolMetadata(
@@ -63,15 +67,15 @@ class MCPToolRegistry:
         )
         self._handlers[name] = handler
 
-    def get_handler(self, name: str) -> Optional[Callable]:
+    def get_handler(self, name: str) -> Callable | None:
         """获取工具处理函数"""
         return self._handlers.get(name)
 
-    def get_metadata(self, name: str) -> Optional[ToolMetadata]:
+    def get_metadata(self, name: str) -> ToolMetadata | None:
         """获取工具元数据"""
         return self._tools.get(name)
 
-    def list_tools(self, category: Optional[ToolCategory] = None) -> List[ToolMetadata]:
+    def list_tools(self, category: ToolCategory | None = None) -> list[ToolMetadata]:
         """列出所有工具"""
         tools = list(self._tools.values())
         if category:

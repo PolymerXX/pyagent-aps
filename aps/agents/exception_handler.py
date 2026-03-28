@@ -1,12 +1,12 @@
 """异常处理Agent"""
 
 from enum import Enum
-from typing import Optional, List
+
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent
 
-from aps.core.config import get_settings
 from aps.agents.base import create_model_settings
+from aps.core.config import get_settings
 
 
 class ExceptionType(str, Enum):
@@ -23,8 +23,8 @@ class ExceptionAnalysis(BaseModel):
 
     exception_type: ExceptionType = Field(default=ExceptionType.UNKNOWN)
     root_cause: str = Field(default="")
-    affected_orders: List[str] = Field(default_factory=list)
-    suggestions: List[str] = Field(default_factory=list)
+    affected_orders: list[str] = Field(default_factory=list)
+    suggestions: list[str] = Field(default_factory=list)
     severity: int = Field(default=1, ge=1, le=5)
 
 
@@ -59,14 +59,14 @@ class ExceptionAgent:
 """
 
     async def analyze(
-        self, error_message: str, context: Optional[dict] = None
+        self, error_message: str, context: dict | None = None
     ) -> ExceptionAnalysis:
         """分析异常"""
         prompt = self._build_prompt(error_message, context)
         result = await self.agent.run(prompt)
-        return result.data
+        return result.output
 
-    def _build_prompt(self, error_message: str, context: Optional[dict]) -> str:
+    def _build_prompt(self, error_message: str, context: dict | None) -> str:
         parts = [f"## 错误信息\n{error_message}"]
 
         if context:

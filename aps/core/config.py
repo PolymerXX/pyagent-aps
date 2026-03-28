@@ -1,8 +1,6 @@
 """核心配置模块"""
 
-import os
-from typing import Optional
-from pydantic import BaseModel, Field
+from pydantic import Field
 from pydantic_settings import BaseSettings
 
 
@@ -14,7 +12,7 @@ class Settings(BaseSettings):
         default="openrouter:xiaomi/mimo-v2-flash", description="默认LLM模型"
     )
     temperature: float = Field(default=0.3, ge=0.0, le=1.0)
-    max_tokens: int = Field(default=4096)
+    max_tokens: int = Field(default=10000)
     top_p: float = Field(default=0.9)
 
     # 求解器配置
@@ -26,7 +24,7 @@ class Settings(BaseSettings):
     mcp_server_port: int = Field(default=8800)
 
     # 数据库配置
-    database_url: Optional[str] = Field(default=None)
+    database_url: str | None = Field(default=None)
 
     # 日志配置
     log_level: str = Field(default="INFO")

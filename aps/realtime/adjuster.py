@@ -1,14 +1,15 @@
 """实时调整处理器"""
 
-from typing import Optional, List, Dict, Any
 from datetime import datetime
+from typing import Any
+
 from pydantic import BaseModel, Field
 
-from aps.models.order import Order
-from aps.models.machine import ProductionLine
-from aps.models.schedule import ScheduleResult
-from aps.models.optimization import OptimizationParams
 from aps.engine.solver import APSSolver
+from aps.models.machine import ProductionLine
+from aps.models.optimization import OptimizationParams
+from aps.models.order import Order
+from aps.models.schedule import ScheduleResult
 
 
 class AdjustmentEvent(BaseModel):
@@ -16,17 +17,17 @@ class AdjustmentEvent(BaseModel):
 
     event_type: str
     event_time: datetime = Field(default_factory=datetime.now)
-    affected_orders: List[str] = Field(default_factory=list)
-    details: Dict[str, Any] = Field(default_factory=dict)
+    affected_orders: list[str] = Field(default_factory=list)
+    details: dict[str, Any] = Field(default_factory=dict)
 
 
 class RealtimeAdjuster:
     """实时调整处理器"""
 
-    def __init__(self, orders: List[Order], machines: List[ProductionLine]):
+    def __init__(self, orders: list[Order], machines: list[ProductionLine]):
         self.orders = orders
         self.machines = machines
-        self._event_history: List[AdjustmentEvent] = []
+        self._event_history: list[AdjustmentEvent] = []
 
     def handle_new_order(self, order: Order) -> AdjustmentEvent:
         """处理新订单"""
@@ -58,7 +59,7 @@ class RealtimeAdjuster:
         return event
 
     def handle_order_change(
-        self, order_id: str, changes: Dict[str, Any]
+        self, order_id: str, changes: dict[str, Any]
     ) -> AdjustmentEvent:
         """处理订单变更"""
         for order in self.orders:
@@ -76,7 +77,7 @@ class RealtimeAdjuster:
         self._event_history.append(event)
         return event
 
-    def reschedule(self, params: Optional[OptimizationParams] = None) -> ScheduleResult:
+    def reschedule(self, params: OptimizationParams | None = None) -> ScheduleResult:
         """重新排程"""
         solver = APSSolver(
             orders=self.orders,

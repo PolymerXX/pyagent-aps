@@ -1,36 +1,51 @@
 """APS排产求解器
 
-使用OR-Tools CP-SAT求解器进行排产优化
+自动选择最优求解器：
+- OR-Tools CP-SAT（如果可用）- 提供最优解
+- 启发式算法（回退）- 快速但可能非最优
 """
 
-from typing import List, Optional, Dict, Any
-from datetime import datetime
 import time
 
-from aps.models.order import Order
-from aps.models.machine import ProductionLine
+from aps.engine.cp_sat_solver import HAS_ORTOOLS, CPSATSolver
 from aps.models.constraint import ProductionConstraints
+from aps.models.machine import ProductionLine
+from aps.models.optimization import OptimizationParams
+from aps.models.order import Order
 from aps.models.schedule import ScheduleResult, TaskAssignment, TaskStatus
-from aps.models.optimization import OptimizationParams, OptimizationStrategy
 
 
 class APSSolver:
-    """APS排产求解器"""
+    """APS排产求解器
+
+    自动检测并使用最优求解器：
+    - 当OR-Tools可用时，使用CP-SAT求解器获得最优解
+    - 否则回退到启发式算法
+    """
 
     def __init__(
         self,
-        orders: List[Order],
-        machines: List[ProductionLine],
-        constraints: Optional[ProductionConstraints] = None,
-        params: Optional[OptimizationParams] = None,
+        orders: list[Order],
+        machines: list[ProductionLine],
+        constraints: ProductionConstraints | None = None,
+        params: OptimizationParams | None = None,
+        use_cp_sat: bool = True,
     ):
         self.orders = orders
         self.machines = machines
         self.constraints = constraints or ProductionConstraints()
         self.params = params or OptimizationParams()
+        self.use_cp_sat = use_cp_sat and HAS_ORTOOLS
+        self._use_cache = True
+        self._profiler = None
 
     def solve(self) -> ScheduleResult:
-        """执行求解"""
+        """执行求解
+
+        自动选择求解器：
+        - CP-SAT（如果use_cp_sat=True且OR-Tools可用）
+        - 启发式算法（回退）
+        """
         start_time = time.time()
 
         if not self.orders:
@@ -47,8 +62,24 @@ class APSSolver:
                 planning_time_seconds=time.time() - start_time,
             )
 
-        assignments = self._heuristic_schedule()
+        if self.use_cp_sat:
+            return self._solve_with_cp_sat()
 
+        return self._solve_with_heuristic(start_time)
+
+    def _solve_with_cp_sat(self) -> ScheduleResult:
+        """使用CP-SAT求解器"""
+        solver = CPSATSolver(
+            orders=self.orders,
+            machines=self.machines,
+            constraints=self.constraints,
+            params=self.params,
+        )
+        return solver.solve()
+
+    def _solve_with_heuristic(self, start_time: float) -> ScheduleResult:
+        """使用启发式算法求解"""
+        assignments = self._heuristic_schedule()
         makespan = max(a.end_time for a in assignments) if assignments else 0.0
         on_time_count = sum(1 for a in assignments if a.is_on_time)
         on_time_rate = on_time_count / len(assignments) if assignments else 1.0
@@ -59,7 +90,6 @@ class APSSolver:
                 total_changeover += 0.5
 
         utilization = self._calculate_utilization(assignments, makespan)
-
         planning_time = time.time() - start_time
 
         return ScheduleResult(
@@ -72,14 +102,12 @@ class APSSolver:
             is_optimal=False,
         )
 
-    def _heuristic_schedule(self) -> List[TaskAssignment]:
+    def _heuristic_schedule(self) -> list[TaskAssignment]:
         """启发式排产算法"""
         assignments = []
-
         sorted_orders = sorted(self.orders, key=lambda o: o.due_date)
-
-        machine_times: Dict[str, float] = {m.id: 0.0 for m in self.machines}
-        machine_last_product: Dict[str, str] = {}
+        machine_times: dict[str, float] = {m.id: 0.0 for m in self.machines}
+        machine_last_product: dict[str, str] = {}
 
         for order in sorted_orders:
             best_machine = None
@@ -90,7 +118,6 @@ class APSSolver:
                     continue
 
                 start_time = machine_times[machine.id]
-
                 if machine_last_product.get(machine.id) != order.product.name:
                     start_time += machine.setup_time_hours
 
@@ -127,19 +154,25 @@ class APSSolver:
         return assignments
 
     def _calculate_utilization(
-        self, assignments: List[TaskAssignment], makespan: float
-    ) -> Dict[str, float]:
+        self, assignments: list[TaskAssignment], makespan: float
+    ) -> dict[str, float]:
         """计算机器利用率"""
         utilization = {}
-
         for machine in self.machines:
             machine_assignments = [a for a in assignments if a.machine_id == machine.id]
-
             if not machine_assignments or makespan == 0:
                 utilization[machine.id] = 0.0
                 continue
-
             total_work = sum(a.duration for a in machine_assignments)
             utilization[machine.id] = total_work / makespan
-
         return utilization
+
+    def enable_cache(self, enabled: bool = True) -> "APSSolver":
+        """启用/禁用缓存"""
+        self._use_cache = enabled
+        return self
+
+    def set_profiler(self, profiler) -> "APSSolver":
+        """设置性能分析器"""
+        self._profiler = profiler
+        return self

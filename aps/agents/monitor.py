@@ -1,13 +1,12 @@
 """监控Agent - 实时监控生产状态"""
 
-from typing import Optional, List
- Dict, Any
 from datetime import datetime
+
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent
 
-from aps.core.config import get_settings
 from aps.agents.base import create_model_settings
+from aps.core.config import get_settings
 from aps.models.schedule import ScheduleResult
 
 
@@ -28,8 +27,8 @@ class MachineStatus(BaseModel):
     machine_id: str
     status: str
     utilization: float
-    current_task: Optional[str] = None
-    alerts: List[str] = Field(default_factory=list)
+    current_task: str | None = None
+    alerts: list[str] = Field(default_factory=list)
 
 
 class MonitorReport(BaseModel):
@@ -40,10 +39,10 @@ class MonitorReport(BaseModel):
     )
     timestamp: datetime = Field(default_factory=datetime.now)
     overall_status: str = "normal"
-    metrics: List[MonitorMetric] = Field(default_factory=list)
-    alerts: List[str] = Field(default_factory=list)
-    machine_statuses: List[MachineStatus] = Field(default_factory=list)
-    recommendations: List[str] = Field(default_factory=list)
+    metrics: list[MonitorMetric] = Field(default_factory=list)
+    alerts: list[str] = Field(default_factory=list)
+    machine_statuses: list[MachineStatus] = Field(default_factory=list)
+    recommendations: list[str] = Field(default_factory=list)
     summary: str = ""
 
 
@@ -81,12 +80,12 @@ class MonitorAgent:
 """
 
     async def run(
-        self, result: ScheduleResult, context: Optional[dict] = None
+        self, result: ScheduleResult, context: dict | None = None
     ) -> MonitorReport:
         """生成监控报告"""
         prompt = self._build_monitor_prompt(result)
         agent_result = await self.agent.run(prompt)
-        return agent_result.data
+        return agent_result.output
 
     def _build_monitor_prompt(self, result: ScheduleResult) -> str:
         """构建监控提示"""

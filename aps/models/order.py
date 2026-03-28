@@ -1,40 +1,36 @@
-"""订单数据模型"""
+"""订单和产品数据模型"""
 
 from enum import Enum
-from typing import Optional, List
-from pydantic import BaseModel, Field
+
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ProductType(str, Enum):
-    """产品类型"""
-
-    COLA = "cola"
-    MILK = "milk"
-    ORANGE_JUICE = "orange_juice"
-    WATER = "water"
+    BEVERAGE = "beverage"
     DAIRY = "dairy"
     JUICE = "juice"
-    BEVERAGE = "beverage"
 
 
 class Product(BaseModel):
-    """产品信息"""
-
+    id: str = Field(..., description="产品唯一标识")
     name: str = Field(..., description="产品名称")
     product_type: ProductType = Field(..., description="产品类型")
-    unit_profit: float = Field(default=1.0, ge=0, description="单位利润")
+    production_rate: float = Field(..., description="生产速率（瓶/小时）")
+    unit_profit: float = Field(default=0.0, description="单位利润")
+
+    model_config = ConfigDict()
 
 
 class Order(BaseModel):
-    """生产订单"""
-
-    id: str = Field(..., description="订单ID")
+    id: str = Field(..., description="订单唯一标识")
     product: Product = Field(..., description="产品信息")
-    quantity: int = Field(..., gt=0, description="数量")
-    due_date: float = Field(default=72.0, ge=0, description="截止时间（小时）")
-    min_start_time: float = Field(default=0.0, ge=0, description="最早开始时间")
+    quantity: int = Field(..., gt=0, description="订单数量（瓶）")
+    due_date: int = Field(..., description="截止时间(相对于时间0的小时数)")
+    priority: int = Field(default=1, ge=1, le=10, description="优先级（1-10，10最高)")
+    min_start_time: int = Field(default=0, ge=0, description="最早开始时间")
 
     @property
     def estimated_production_hours(self) -> float:
-        """估算生产时间（基于1000/小时的默认产能）"""
-        return self.quantity / 1000.0
+        return self.quantity / self.product.production_rate
+
+    model_config = ConfigDict()

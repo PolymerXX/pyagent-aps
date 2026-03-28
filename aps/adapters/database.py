@@ -1,12 +1,12 @@
 """数据库适配器"""
 
-from typing import List, Optional, Dict, Any
-import sqlite3
 import json
+import sqlite3
+from typing import Any
 
 from aps.adapters.base import BaseAdapter, DataConfig
-from aps.models.order import Order, Product, ProductType
 from aps.models.machine import ProductionLine
+from aps.models.order import Order, Product, ProductType
 from aps.models.schedule import ScheduleResult
 
 
@@ -26,7 +26,7 @@ class DatabaseAdapter(BaseAdapter):
         else:
             return sqlite3.connect(":memory:", check_same_thread=False)
 
-    def get_orders(self, filter: Optional[Dict[str, Any]] = None) -> List[Order]:
+    def get_orders(self, filter: dict[str, Any] | None = None) -> list[Order]:
         cursor = self.connection.cursor()
         try:
             cursor.execute("SELECT * FROM orders")
@@ -36,8 +36,8 @@ class DatabaseAdapter(BaseAdapter):
             return []
 
     def get_machines(
-        self, filter: Optional[Dict[str, Any]] = None
-    ) -> List[ProductionLine]:
+        self, filter: dict[str, Any] | None = None
+    ) -> list[ProductionLine]:
         cursor = self.connection.cursor()
         try:
             cursor.execute("SELECT * FROM machines")

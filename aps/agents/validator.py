@@ -1,19 +1,19 @@
 """验证Agent - 综合验证排程结果"""
 
-from typing import Optional, List
-from pydantic import BaseModel, Field
-from pydantic_ai import Agent
+from typing import cast
 
+from pydantic import BaseModel, Field
+
+from aps.agents.base import BaseAPSAgent, create_model_settings
 from aps.core.config import get_settings
-from aps.agents.base import create_model_settings, BaseAPSAgent
 from aps.models.schedule import ScheduleResult
 
 
 class ConstraintViolation(BaseModel):
     """约束违反详情"""
     type: str = Field(..., description="违反类型")
-    order_id: Optional[str] = Field(None, description="相关订单ID")
-    machine_id: Optional[str] = Field(None, description="相关机器ID")
+    order_id: str | None = Field(None, description="相关订单ID")
+    machine_id: str | None = Field(None, description="相关机器ID")
     description: str = Field(..., description="违反描述")
     severity: str = Field("warning", description="严重程度: info/warning/error")
     impact: float = Field(0.0, ge=0.0, le=1.0, description="影响程度")
@@ -22,7 +22,7 @@ class ConstraintViolation(BaseModel):
 class ValidationResult(BaseModel):
     """验证结果"""
     is_valid: bool = Field(..., description="是否有效")
-    constraint_violations: List[ConstraintViolation] = Field(
+    constraint_violations: list[ConstraintViolation] = Field(
         default_factory=list,
         description="约束违反列表"
     )
@@ -32,11 +32,11 @@ class ValidationResult(BaseModel):
         le=1.0,
         description="与历史排程偏差（0-1）"
     )
-    warnings: List[str] = Field(
+    warnings: list[str] = Field(
         default_factory=list,
         description="警告列表"
     )
-    recommendations: List[str] = Field(
+    recommendations: list[str] = Field(
         default_factory=list,
         description="改进建议"
     )
@@ -91,13 +91,13 @@ class ValidatorAgent(BaseAPSAgent):
         """验证排程结果（使用LLM）"""
         prompt = self._build_validation_prompt(result)
         agent_result = await self.agent.run(prompt)
-        return agent_result.data
+        return cast(ValidationResult, agent_result.output)
 
     def validate_sync(self, result: ScheduleResult) -> ValidationResult:
         """同步验证排程结果（使用LLM）"""
         prompt = self._build_validation_prompt(result)
         agent_result = self.agent.run_sync(prompt)
-        return agent_result.data
+        return cast(ValidationResult, agent_result.output)
 
     def _build_validation_prompt(self, result: ScheduleResult) -> str:
         """构建验证提示"""
@@ -143,7 +143,7 @@ class ValidatorAgent(BaseAPSAgent):
             overall_status=overall_status,
         )
 
-    def _check_constraint_violations(self, result: ScheduleResult) -> List[ConstraintViolation]:
+    def _check_constraint_violations(self, result: ScheduleResult) -> list[ConstraintViolation]:
         """检查约束违反"""
         violations = []
 
@@ -162,6 +162,7 @@ class ValidatorAgent(BaseAPSAgent):
             if util > 0.95:
                 violations.append(ConstraintViolation(
                     type="capacity",
+                    order_id=None,
                     machine_id=machine_id,
                     description=f"机器利用率过高 {util * 100:.1f}%",
                     severity="warning" if util < 0.98 else "error",
@@ -170,7 +171,7 @@ class ValidatorAgent(BaseAPSAgent):
 
         return violations
 
-    def _generate_warnings(self, result: ScheduleResult) -> List[str]:
+    def _generate_warnings(self, result: ScheduleResult) -> list[str]:
         """生成警告"""
         warnings = []
 
@@ -218,7 +219,7 @@ class ValidatorAgent(BaseAPSAgent):
 
         return min(1.0, max(0.0, score))
 
-    def _generate_recommendations(self, result: ScheduleResult, quality_score: float) -> List[str]:
+    def _generate_recommendations(self, result: ScheduleResult, quality_score: float) -> list[str]:
         """生成改进建议"""
         recommendations = []
 

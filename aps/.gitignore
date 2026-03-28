@@ -19,3 +19,14 @@ build/
 
 # Logs
 *.log
+
+# Virtual environments
+.venv/
+venv/
+
+# AI agents
+.agents/
+
+# Debug
+debug_*.py
+debug_*.png
