@@ -56,6 +56,35 @@ class TestPlannerOutput:
         assert out.weights.on_time == 0.7
         assert out.weights.changeover == 0.1
 
+    def test_planner_output_weights_json_string_from_llm(self):
+        """模型若把 weights 打成 JSON 字符串，应展平为顶层字段（避免 tool 校验失败）。"""
+        from aps.agents.planner import PlannerOutput
+
+        blob = '{"on_time": 0.6, "changeover": 0.15, "utilization": 0.15, "profit": 0.1}'
+        out = PlannerOutput.model_validate(
+            {"strategy": "balanced", "weights": blob, "explanation": "x"}
+        )
+        assert out.on_time == 0.6
+        assert out.changeover == 0.15
+        assert out.utilization == 0.15
+        assert out.profit == 0.1
+
+    def test_planner_output_weights_dict_from_llm(self):
+        from aps.agents.planner import PlannerOutput
+
+        out = PlannerOutput.model_validate(
+            {
+                "weights": {
+                    "on_time": 0.5,
+                    "changeover": 0.2,
+                    "utilization": 0.2,
+                    "profit": 0.1,
+                }
+            }
+        )
+        assert out.on_time == 0.5
+        assert out.profit == 0.1
+
     def test_planner_output_to_optimization_params(self):
         from aps.agents.planner import PlannerOutput
 

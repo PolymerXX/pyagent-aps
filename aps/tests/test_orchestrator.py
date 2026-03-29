@@ -2,62 +2,19 @@
 
 import pytest
 
-from aps.models.machine import MachineStatus, ProductionLine
 from aps.models.optimization import OptimizationStrategy
-from aps.models.order import Order, Product, ProductType
 from aps.models.schedule import ScheduleExplanation, ScheduleResult, TaskAssignment, TaskStatus
+from aps.tests.sample_scenario import get_sample_machines, get_sample_orders
 
 
 @pytest.fixture
 def sample_orders():
-    return [
-        Order(
-            id="O001",
-            product=Product(
-                id="P001", name="可乐", product_type=ProductType.BEVERAGE, production_rate=100
-            ),
-            quantity=1000,
-            due_date=24,
-        ),
-        Order(
-            id="O002",
-            product=Product(
-                id="P002", name="牛奶", product_type=ProductType.DAIRY, production_rate=80
-            ),
-            quantity=500,
-            due_date=12,
-        ),
-        Order(
-            id="O003",
-            product=Product(
-                id="P003", name="橙汁", product_type=ProductType.JUICE, production_rate=120
-            ),
-            quantity=800,
-            due_date=36,
-        ),
-    ]
+    return get_sample_orders()
 
 
 @pytest.fixture
 def sample_machines():
-    return [
-        ProductionLine(
-            id="M001",
-            name="产线A",
-            supported_product_types=[ProductType.BEVERAGE, ProductType.DAIRY],
-            capacity_per_hour=100,
-            setup_time_hours=0.5,
-            status=MachineStatus(machine_id="M001", status="running"),
-        ),
-        ProductionLine(
-            id="M002",
-            name="产线B",
-            supported_product_types=[ProductType.BEVERAGE, ProductType.JUICE],
-            capacity_per_hour=150,
-            setup_time_hours=0.3,
-            status=MachineStatus(machine_id="M002", status="running"),
-        ),
-    ]
+    return get_sample_machines()
 
 
 @pytest.fixture

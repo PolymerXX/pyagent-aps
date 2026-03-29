@@ -1,11 +1,17 @@
 """核心配置模块"""
 
 from pydantic import Field
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     """APS系统配置"""
+
+    model_config = SettingsConfigDict(
+        env_prefix="APS_",
+        env_file=".env",
+        extra="ignore",
+    )
 
     # 模型配置
     default_model: str = Field(
@@ -29,12 +35,6 @@ class Settings(BaseSettings):
     # 日志配置
     log_level: str = Field(default="INFO")
     logfire_enabled: bool = Field(default=True)
-
-    class Config:
-        env_prefix = "APS_"
-        env_file = ".env"
-        extra = "ignore"
-
 
 def get_settings() -> Settings:
     """获取配置实例"""

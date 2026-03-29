@@ -1,8 +1,9 @@
 """规划Agent - 将用户请求转换为优化参数"""
 
-from typing import cast
+import json
+from typing import Any, cast
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from aps.agents.base import AgentContext, BaseAPSAgent, create_model_settings
 from aps.core.config import get_settings
@@ -18,7 +19,12 @@ class PlannerOutput(BaseModel):
 
     权重仅通过四个顶层标量字段表示。禁止输出名为 weights 的字段，禁止嵌套对象或 JSON 字符串；
     否则工具参数校验会把错误的 weights 当作 ObjectiveWeights 而失败。
+
+    部分模型仍会把 weights 整段打成 JSON 字符串；在校验前展平到顶层字段并丢弃 weights，避免
+    UnexpectedModelBehavior / ValidationError（见 Logfire issue 等）。
     """
+
+    model_config = ConfigDict(extra="ignore")
 
     strategy: OptimizationStrategy = Field(
         default=OptimizationStrategy.BALANCED, description="优化策略"
@@ -43,6 +49,31 @@ class PlannerOutput(BaseModel):
         default_factory=list, description="冻结的分配（不调整）"
     )
     explanation: str = Field(default="", description="规划决策说明")
+
+    @model_validator(mode="before")
+    @classmethod
+    def _coerce_legacy_weights_payload(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+        out = dict(data)
+        raw = out.pop("weights", None)
+        if raw is None:
+            return out
+        parsed: dict[str, Any] | None = None
+        if isinstance(raw, str):
+            try:
+                loaded = json.loads(raw)
+            except json.JSONDecodeError:
+                return out
+            parsed = loaded if isinstance(loaded, dict) else None
+        elif isinstance(raw, dict):
+            parsed = raw
+        if not parsed:
+            return out
+        for key in ("on_time", "changeover", "utilization", "profit"):
+            if key in parsed and key not in out:
+                out[key] = parsed[key]
+        return out
 
     @property
     def weights(self) -> ObjectiveWeights:

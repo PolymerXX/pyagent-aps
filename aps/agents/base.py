@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from pydantic_ai import Agent
 from pydantic_ai.models.openrouter import OpenRouterModelSettings
 
@@ -29,16 +29,14 @@ DEFAULT_SETTINGS = create_model_settings()
 class AgentContext(BaseModel):
     """Agent上下文，用于在Agent之间传递信息"""
 
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
     user_input: str = ""
     orders_info: str = ""
     machines_info: str = ""
     constraints_info: str = ""
     optimization_params: dict | None = None
     schedule_result: dict | None = None
-
-    class Config:
-        arbitrary_types_allowed = True
-
 
 class BaseAPSAgent:
     """APS Agent基类"""

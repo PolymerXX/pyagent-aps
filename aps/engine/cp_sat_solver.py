@@ -4,11 +4,13 @@
 """
 
 import time
+from typing import Any
 
 try:
     from ortools.sat.python import cp_model
     HAS_ORTOOLS = True
 except ImportError:
+    cp_model = None  # 无 OR-Tools 时占位，供类型检查；仅 _solve_with_cp_sat 使用且前有 HAS_ORTOOLS 守卫
     HAS_ORTOOLS = False
 
 from aps.models.constraint import ProductionConstraints
@@ -51,7 +53,9 @@ class CPSATSolver:
 
     def _solve_with_cp_sat(self, start_time: float) -> ScheduleResult:
         """使用CP-SAT求解"""
-        model = cp_model.CpModel()
+        assert cp_model is not None
+        # OR-Tools 类型存根常不完整，用 Any 避免误报（运行时 API 正常）
+        model: Any = cp_model.CpModel()
 
         order_count = len(self.orders)
         machine_count = len(self.machines)
@@ -143,7 +147,7 @@ class CPSATSolver:
         else:
             model.Minimize(makespan)
 
-        solver = cp_model.CpSolver()
+        solver: Any = cp_model.CpSolver()
         solver.parameters.max_time_in_seconds = self.params.time_limit_seconds
         solver.parameters.num_search_workers = 1
 
@@ -166,7 +170,7 @@ class CPSATSolver:
 
     def _extract_solution(
         self,
-        solver,
+        solver: Any,
         starts: dict,
         ends: dict,
         assigned: dict,
