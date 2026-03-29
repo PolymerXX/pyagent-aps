@@ -258,11 +258,7 @@ class APSSystem:
                 orders=self.orders,
                 machines=self.machines,
             )
-            if (
-                adjustment
-                and hasattr(adjustment, "new_schedule")
-                and adjustment.new_schedule
-            ):
+            if adjustment and adjustment.new_schedule is not None:
                 return adjustment.new_schedule
         except Exception:
             pass

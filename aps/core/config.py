@@ -1,7 +1,15 @@
 """核心配置模块"""
 
+from pathlib import Path
+
+from dotenv import load_dotenv
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# pydantic-settings 的 env_file 只映射到 Settings 字段；Logfire 等库读的是 os.environ。
+# 在首次加载配置前把 aps/.env 合并进环境变量，否则 .env 里的 LOGFIRE_TOKEN 等不会生效。
+_APS_ROOT = Path(__file__).resolve().parent.parent
+load_dotenv(_APS_ROOT / ".env")
 
 
 class Settings(BaseSettings):

@@ -27,6 +27,10 @@ def init_project_path() -> None:
 
 def init_page(title: str, icon: str, page_title: str | None = None) -> None:
     init_project_path()
+    from aps.core.logfire_setup import init_logfire
+
+    init_logfire()
+
     from ui.styles import apply_all_styles
 
     st.set_page_config(
@@ -35,6 +39,17 @@ def init_page(title: str, icon: str, page_title: str | None = None) -> None:
         layout="wide",
     )
     apply_all_styles()
+
+
+def log_ui_event(name: str, **kwargs: Any) -> None:
+    """Streamlit 等业务层打点；``APS_LOGFIRE_ENABLED=false`` 时直接返回。"""
+    from aps.core.config import get_settings
+
+    if not get_settings().logfire_enabled:
+        return
+    import logfire
+
+    logfire.info(name, **kwargs)
 
 
 STATUS_COLORS: Dict[str, str] = {

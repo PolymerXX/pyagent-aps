@@ -8,6 +8,7 @@
 import time
 
 from aps.engine.cp_sat_solver import HAS_ORTOOLS, CPSATSolver
+from aps.engine.schedule_metrics import calculate_machine_utilization
 from aps.models.constraint import ProductionConstraints
 from aps.models.machine import ProductionLine
 from aps.models.optimization import OptimizationParams
@@ -89,7 +90,7 @@ class APSSolver:
             if assignments[i].machine_id == assignments[i - 1].machine_id:
                 total_changeover += 0.5
 
-        utilization = self._calculate_utilization(assignments, makespan)
+        utilization = calculate_machine_utilization(assignments, self.machines, makespan)
         planning_time = time.time() - start_time
 
         return ScheduleResult(
@@ -152,20 +153,6 @@ class APSSolver:
             machine_last_product[best_machine.id] = order.product.name
 
         return assignments
-
-    def _calculate_utilization(
-        self, assignments: list[TaskAssignment], makespan: float
-    ) -> dict[str, float]:
-        """计算机器利用率"""
-        utilization = {}
-        for machine in self.machines:
-            machine_assignments = [a for a in assignments if a.machine_id == machine.id]
-            if not machine_assignments or makespan == 0:
-                utilization[machine.id] = 0.0
-                continue
-            total_work = sum(a.duration for a in machine_assignments)
-            utilization[machine.id] = total_work / makespan
-        return utilization
 
     def enable_cache(self, enabled: bool = True) -> "APSSolver":
         """启用/禁用缓存"""

@@ -33,6 +33,9 @@ class Adjustment(BaseModel):
     )
     reason: str = Field(..., description="调整原因")
     new_schedule_id: str | None = Field(None, description="新排程ID")
+    new_schedule: ScheduleResult | None = Field(
+        default=None, description="调整后的完整排程（若有）"
+    )
     changes: dict[str, Any] = Field(default_factory=dict, description="变更详情")
     timestamp: datetime = Field(default_factory=datetime.now, description="时间戳")
 
@@ -78,13 +81,14 @@ class AdjusterAgent:
         params = OptimizationParams()
         all_orders = orders + [order]
 
-        result = await self._run_solver(all_orders, machines, params)
+        schedule, schedule_id = await self._run_solver(all_orders, machines, params)
 
         adjustment = Adjustment(
             action_type=AdjustmentType.NEW_ORDER,
             affected_orders=[order.id],
             reason=f"新订单 {order.id} 加入",
-            new_schedule_id=result.get("schedule_id"),
+            new_schedule_id=schedule_id,
+            new_schedule=schedule,
             changes={"added_order": order.id},
             timestamp=datetime.now(),
         )
@@ -97,15 +101,16 @@ class AdjusterAgent:
         available_machines = [m for m in machines if m.id != machine_id]
 
         params = OptimizationParams()
-        result = await self._run_solver(orders, available_machines, params)
+        schedule, schedule_id = await self._run_solver(orders, available_machines, params)
 
-        affected = [a.order_id for a in result.get("assignments", [])]
+        affected = [a.order_id for a in schedule.assignments]
 
         adjustment = Adjustment(
             action_type=AdjustmentType.MACHINE_DOWN,
             affected_orders=affected,
             reason=f"机器 {machine_id} 故障",
-            new_schedule_id=result.get("schedule_id"),
+            new_schedule_id=schedule_id,
+            new_schedule=schedule,
             changes={"disabled_machine": machine_id},
             timestamp=datetime.now(),
         )
@@ -120,13 +125,14 @@ class AdjusterAgent:
     ) -> Adjustment:
         """处理订单变更"""
         params = OptimizationParams()
-        result = await self._run_solver(orders, machines, params)
+        schedule, schedule_id = await self._run_solver(orders, machines, params)
 
         adjustment = Adjustment(
             action_type=AdjustmentType.ORDER_CHANGE,
             affected_orders=[order_id],
             reason=f"订单 {order_id} 属性变更",
-            new_schedule_id=result.get("schedule_id"),
+            new_schedule_id=schedule_id,
+            new_schedule=schedule,
             changes=changes,
             timestamp=datetime.now(),
         )
@@ -137,20 +143,16 @@ class AdjusterAgent:
         orders: list[Order],
         machines: list[ProductionLine],
         params: OptimizationParams,
-    ) -> dict:
-        """运行求解器"""
+    ) -> tuple[ScheduleResult, str]:
+        """运行求解器，返回排程结果与分配 ID。"""
         solver = APSSolver(
             orders=orders,
             machines=machines,
             params=params,
         )
-        result = solver.solve()
-
+        schedule = solver.solve()
         schedule_id = f"adj-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
-        result_dict = result.model_dump()
-        result_dict["schedule_id"] = schedule_id
-
-        return result_dict
+        return schedule, schedule_id
 
     async def analyze_and_adjust(
         self,

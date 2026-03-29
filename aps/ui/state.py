@@ -3,11 +3,12 @@
 集中管理 APS 系统的 session_state，确保数据在页面间同步
 """
 
+# ruff: noqa: E402
+
 from __future__ import annotations
 
 import sys
 from pathlib import Path
-from typing import List, Optional
 
 _project_root = Path(__file__).resolve().parent.parent
 _aps_parent = _project_root.parent
@@ -168,6 +169,7 @@ class AppState:
     CONSTRAINTS_KEY = "aps_constraints"
     SCHEDULE_RESULT_KEY = "aps_schedule_result"
     CHANGEOVER_RULES_KEY = "aps_changeover_rules"
+    AGENT_TRACE_KEY = "aps_agent_trace"
 
     @classmethod
     def init_state(cls) -> None:
@@ -187,6 +189,9 @@ class AppState:
 
         if cls.CHANGEOVER_RULES_KEY not in st.session_state:
             st.session_state[cls.CHANGEOVER_RULES_KEY] = DEFAULT_CHANGEOVER_RULES.copy()
+
+        if cls.AGENT_TRACE_KEY not in st.session_state:
+            st.session_state[cls.AGENT_TRACE_KEY] = None
 
     @classmethod
     def get_orders(cls) -> list:
@@ -289,6 +294,21 @@ class AppState:
         st.session_state[cls.SCHEDULE_RESULT_KEY] = result
 
     @classmethod
+    def get_agent_trace(cls) -> dict | None:
+        cls.init_state()
+        return st.session_state.get(cls.AGENT_TRACE_KEY)
+
+    @classmethod
+    def set_agent_trace(cls, trace: dict | None) -> None:
+        cls.init_state()
+        st.session_state[cls.AGENT_TRACE_KEY] = trace
+
+    @classmethod
+    def clear_agent_trace(cls) -> None:
+        cls.init_state()
+        st.session_state[cls.AGENT_TRACE_KEY] = None
+
+    @classmethod
     def get_changeover_rules(cls):
         cls.init_state()
         return st.session_state[cls.CHANGEOVER_RULES_KEY]
@@ -306,3 +326,4 @@ class AppState:
         st.session_state[cls.CONSTRAINTS_KEY] = ProductionConstraints()
         st.session_state[cls.SCHEDULE_RESULT_KEY] = None
         st.session_state[cls.CHANGEOVER_RULES_KEY] = DEFAULT_CHANGEOVER_RULES.copy()
+        st.session_state[cls.AGENT_TRACE_KEY] = None

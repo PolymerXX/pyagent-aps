@@ -13,6 +13,7 @@ except ImportError:
     cp_model = None  # 无 OR-Tools 时占位，供类型检查；仅 _solve_with_cp_sat 使用且前有 HAS_ORTOOLS 守卫
     HAS_ORTOOLS = False
 
+from aps.engine.schedule_metrics import calculate_machine_utilization
 from aps.models.constraint import ProductionConstraints
 from aps.models.machine import ProductionLine
 from aps.models.optimization import OptimizationParams, OptimizationStrategy
@@ -211,7 +212,7 @@ class CPSATSolver:
         on_time_count = sum(1 for a in assignments if a.is_on_time)
         on_time_rate = on_time_count / len(assignments) if assignments else 1.0
 
-        utilization = self._calculate_utilization(assignments, makespan)
+        utilization = calculate_machine_utilization(assignments, self.machines, makespan)
 
         return ScheduleResult(
             assignments=assignments,
@@ -231,7 +232,7 @@ class CPSATSolver:
         on_time_count = sum(1 for a in assignments if a.is_on_time)
         on_time_rate = on_time_count / len(assignments) if assignments else 1.0
 
-        utilization = self._calculate_utilization(assignments, makespan)
+        utilization = calculate_machine_utilization(assignments, self.machines, makespan)
 
         return ScheduleResult(
             assignments=assignments,
@@ -285,21 +286,3 @@ class CPSATSolver:
             machine_times[best_machine.id] = end_time
 
         return assignments
-
-    def _calculate_utilization(
-        self, assignments: list[TaskAssignment], makespan: float
-    ) -> dict[str, float]:
-        """计算机器利用率"""
-        utilization = {}
-
-        for machine in self.machines:
-            machine_assignments = [a for a in assignments if a.machine_id == machine.id]
-
-            if not machine_assignments or makespan == 0:
-                utilization[machine.id] = 0.0
-                continue
-
-            total_work = sum(a.duration for a in machine_assignments)
-            utilization[machine.id] = total_work / makespan
-
-        return utilization
