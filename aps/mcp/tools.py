@@ -4,6 +4,8 @@ import uuid
 from datetime import datetime
 from typing import Any
 
+from aps.adapters.parsers import DEFAULT_PRODUCTION_RATE, parse_product_type
+from aps.core.state import APSState
 from aps.engine.solver import APSSolver
 from aps.mcp.registry import ToolCategory, tool
 from aps.models.constraint import ProductionConstraints
@@ -15,27 +17,13 @@ from aps.models.optimization import (
 )
 from aps.models.order import Order, Product, ProductType
 
-_global_state: dict[str, Any] = {
-    "orders": {},
-    "machines": {},
-    "constraints": None,
-    "current_schedule": None,
-    "schedule_history": [],
-}
 
-
-def _get_or_create_constraints() -> ProductionConstraints:
-    if _global_state["constraints"] is None:
-        _global_state["constraints"] = ProductionConstraints()
-    return _global_state["constraints"]
+def _get_state() -> APSState:
+    return APSState.get_instance()
 
 
 def _reset_state() -> None:
-    _global_state["orders"] = {}
-    _global_state["machines"] = {}
-    _global_state["constraints"] = None
-    _global_state["current_schedule"] = None
-    _global_state["schedule_history"] = []
+    APSState.reset_instance()
 
 
 @tool(
@@ -54,8 +42,9 @@ def run_aps_schedule(
     profit_weight: float = 0.2,
 ) -> dict[str, Any]:
     """执行APS排程"""
-    orders = list(_global_state["orders"].values())
-    machines = list(_global_state["machines"].values())
+    state = _get_state()
+    orders = state.get_orders_list()
+    machines = state.get_machines_list()
 
     if orders_filter:
         orders = [o for o in orders if o.id in orders_filter]
@@ -86,7 +75,7 @@ def run_aps_schedule(
         time_limit_seconds=time_limit,
     )
 
-    constraints = _get_or_create_constraints()
+    constraints = state.get_constraints()
 
     solver = APSSolver(
         orders=orders,
@@ -98,12 +87,11 @@ def run_aps_schedule(
     result = solver.solve()
 
     schedule_id = str(uuid.uuid4())[:8]
+    state.set_schedule(result, schedule_id)
+
     result_dict = result.model_dump()
     result_dict["schedule_id"] = schedule_id
     result_dict["created_at"] = datetime.now().isoformat()
-
-    _global_state["current_schedule"] = result_dict
-    _global_state["schedule_history"].append(result_dict)
 
     return result_dict
 
@@ -115,13 +103,14 @@ def run_aps_schedule(
 )
 def get_schedule_status(schedule_id: str | None = None) -> dict[str, Any]:
     """获取排程状态"""
+    state = _get_state()
     if schedule_id:
-        for schedule in _global_state["schedule_history"]:
-            if schedule.get("schedule_id") == schedule_id:
-                return schedule
+        schedule = state.get_schedule_by_id(schedule_id)
+        if schedule:
+            return schedule
         return {"error": f"未找到排程 {schedule_id}", "status": "not_found"}
 
-    current = _global_state["current_schedule"]
+    current = state.get_current_schedule()
     return current or {"status": "no_schedule"}
 
 
@@ -135,24 +124,34 @@ def add_order(
     product: str,
     quantity: int,
     due_in_hours: int | None = None,
+    product_type: str | None = None,
 ) -> dict[str, Any]:
     """添加订单"""
-    if job_id in _global_state["orders"]:
+    state = _get_state()
+    if job_id in state.orders:
         return {"error": f"订单 {job_id} 已存在", "status": "failed"}
+
+    if product_type:
+        try:
+            pt = parse_product_type(product_type)
+        except ValueError:
+            pt = ProductType.BEVERAGE
+    else:
+        pt = ProductType.BEVERAGE
 
     order = Order(
         id=job_id,
         product=Product(
             id=f"mcp_{job_id}",
             name=product,
-            product_type=ProductType.BEVERAGE,
-            production_rate=100.0,
+            product_type=pt,
+            production_rate=DEFAULT_PRODUCTION_RATE,
         ),
         quantity=quantity,
         due_date=due_in_hours if due_in_hours else 72,
     )
 
-    _global_state["orders"][job_id] = order
+    state.add_order(order)
     return {"status": "success", "order_id": job_id}
 
 
@@ -163,10 +162,11 @@ def add_order(
 )
 def update_order(job_id: str, **changes) -> dict[str, Any]:
     """更新订单"""
-    if job_id not in _global_state["orders"]:
+    state = _get_state()
+    order = state.get_order(job_id)
+    if order is None:
         return {"error": f"订单 {job_id} 不存在", "status": "failed"}
 
-    order = _global_state["orders"][job_id]
     if "quantity" in changes:
         order.quantity = changes["quantity"]
     if "due_in_hours" in changes:
@@ -182,8 +182,9 @@ def update_order(job_id: str, **changes) -> dict[str, Any]:
 )
 def get_orders() -> dict[str, Any]:
     """查询订单"""
+    state = _get_state()
     orders = []
-    for order in _global_state["orders"].values():
+    for order in state.get_orders_list():
         orders.append(
             {
                 "job_id": order.id,
@@ -202,9 +203,9 @@ def get_orders() -> dict[str, Any]:
 )
 def remove_order(job_id: str) -> dict[str, Any]:
     """删除订单"""
-    if job_id not in _global_state["orders"]:
+    state = _get_state()
+    if not state.remove_order(job_id):
         return {"error": f"订单 {job_id} 不存在", "status": "failed"}
-    del _global_state["orders"][job_id]
     return {"status": "success", "order_id": job_id}
 
 
@@ -220,16 +221,25 @@ def add_machine(
     name: str | None = None,
 ) -> dict[str, Any]:
     """添加机器"""
-    if machine_id in _global_state["machines"]:
+    state = _get_state()
+    if machine_id in state.machines:
         return {"error": f"机器 {machine_id} 已存在", "status": "failed"}
+
+    supported_types = []
+    for raw in supported_products:
+        try:
+            supported_types.append(parse_product_type(raw))
+        except ValueError:
+            pass
 
     machine = ProductionLine(
         id=machine_id,
         name=name or machine_id,
         capacity_per_hour=capacity_per_hour,
+        supported_product_types=supported_types,
     )
 
-    _global_state["machines"][machine_id] = machine
+    state.add_machine(machine)
     return {"status": "success", "machine_id": machine_id}
 
 
@@ -240,8 +250,9 @@ def add_machine(
 )
 def get_machines() -> dict[str, Any]:
     """查询机器"""
+    state = _get_state()
     machines = []
-    for m in _global_state["machines"].values():
+    for m in state.get_machines_list():
         machines.append(
             {
                 "machine_id": m.id,
@@ -259,7 +270,8 @@ def get_machines() -> dict[str, Any]:
 )
 def update_machine_status(machine_id: str, status: str) -> dict[str, Any]:
     """更新机器状态"""
-    if machine_id not in _global_state["machines"]:
+    state = _get_state()
+    if machine_id not in state.machines:
         return {"error": f"机器 {machine_id} 不存在", "status": "failed"}
     return {"status": "success", "machine_id": machine_id, "new_status": status}
 
@@ -271,7 +283,8 @@ def update_machine_status(machine_id: str, status: str) -> dict[str, Any]:
 )
 def set_constraints(constraints: list[dict]) -> dict[str, Any]:
     """设置约束"""
-    _global_state["constraints"] = ProductionConstraints()
+    state = _get_state()
+    state.set_constraints(ProductionConstraints())
     return {"status": "success", "count": len(constraints)}
 
 

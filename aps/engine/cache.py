@@ -4,6 +4,7 @@
 """
 
 import hashlib
+import threading
 import time
 from functools import lru_cache
 from typing import Optional
@@ -22,6 +23,7 @@ class SolverCache:
         self.max_size = max_size
         self.ttl_seconds = ttl_seconds
         self._cache: dict[str, tuple[ScheduleResult, float]] = {}
+        self._lock = threading.Lock()
         self._hits = 0
         self._misses = 0
 
@@ -31,25 +33,32 @@ class SolverCache:
         machines: list[ProductionLine],
         constraints: ProductionConstraints,
         params: OptimizationParams,
+        solver_type: str = "cp_sat",
     ) -> str:
         """计算缓存键"""
         orders_hash = hashlib.md5(
-            "".join(f"{o.id}:{o.quantity}:{o.due_date}" for o in sorted(orders, key=lambda x: x.id)).encode()
+            "".join(
+                f"{o.id}:{o.quantity}:{o.due_date}:{o.priority}:{o.min_start_time}:{o.product.product_type.value}"
+                for o in sorted(orders, key=lambda x: x.id)
+            ).encode()
         ).hexdigest()
 
         machines_hash = hashlib.md5(
-            "".join(f"{m.id}:{m.capacity_per_hour}" for m in sorted(machines, key=lambda x: x.id)).encode()
+            "".join(
+                f"{m.id}:{m.capacity_per_hour}:{','.join(sorted(str(t) for t in m.supported_product_types))}"
+                for m in sorted(machines, key=lambda x: x.id)
+            ).encode()
         ).hexdigest()
 
         constraints_hash = hashlib.md5(
-            f"{constraints.max_daily_hours}:{constraints.allow_overtime}".encode()
+            f"{constraints.max_daily_hours}:{constraints.allow_overtime}:{constraints.max_overtime_hours}:{len(constraints.changeover_rules)}".encode()
         ).hexdigest()
 
         params_hash = hashlib.md5(
-            f"{params.strategy.value}:{params.time_limit_seconds}".encode()
+            f"{params.strategy.value}:{params.time_limit_seconds}:{params.weights.on_time}:{params.weights.changeover}:{params.weights.utilization}:{params.weights.profit}".encode()
         ).hexdigest()
 
-        return f"{orders_hash}:{machines_hash}:{constraints_hash}:{params_hash}"
+        return f"{orders_hash}:{machines_hash}:{constraints_hash}:{params_hash}:{solver_type}"
 
     def get(
         self,
@@ -57,19 +66,19 @@ class SolverCache:
         machines: list[ProductionLine],
         constraints: ProductionConstraints,
         params: OptimizationParams,
+        solver_type: str = "cp_sat",
     ) -> Optional[ScheduleResult]:
         """获取缓存结果"""
-        key = self._compute_key(orders, machines, constraints, params)
-
-        if key in self._cache:
-            result, timestamp = self._cache[key]
-            if time.time() - timestamp < self.ttl_seconds:
-                self._hits += 1
-                return result
-            else:
-                del self._cache[key]
-
-        self._misses += 1
+        key = self._compute_key(orders, machines, constraints, params, solver_type)
+        with self._lock:
+            if key in self._cache:
+                result, timestamp = self._cache[key]
+                if time.time() - timestamp < self.ttl_seconds:
+                    self._hits += 1
+                    return result
+                else:
+                    del self._cache[key]
+            self._misses += 1
         return None
 
     def set(
@@ -79,20 +88,22 @@ class SolverCache:
         constraints: ProductionConstraints,
         params: OptimizationParams,
         result: ScheduleResult,
+        solver_type: str = "cp_sat",
     ) -> None:
         """设置缓存结果"""
-        if len(self._cache) >= self.max_size:
-            oldest_key = min(self._cache.keys(), key=lambda k: self._cache[k][1])
-            del self._cache[oldest_key]
-
-        key = self._compute_key(orders, machines, constraints, params)
-        self._cache[key] = (result, time.time())
+        with self._lock:
+            if len(self._cache) >= self.max_size:
+                oldest_key = min(self._cache.keys(), key=lambda k: self._cache[k][1])
+                del self._cache[oldest_key]
+            key = self._compute_key(orders, machines, constraints, params, solver_type)
+            self._cache[key] = (result, time.time())
 
     def clear(self) -> None:
         """清空缓存"""
-        self._cache.clear()
-        self._hits = 0
-        self._misses = 0
+        with self._lock:
+            self._cache.clear()
+            self._hits = 0
+            self._misses = 0
 
     @property
     def hit_rate(self) -> float:

@@ -52,12 +52,18 @@ class SchedulerAgent:
     def add_order(self, order: Order) -> None:
         """添加订单"""
         self.orders.append(order)
+        from aps.core.state import APSState
+
+        APSState.get_instance().add_order(order)
 
     def remove_order(self, order_id: str) -> bool:
         """移除订单"""
         for i, order in enumerate(self.orders):
             if order.id == order_id:
                 self.orders.pop(i)
+                from aps.core.state import APSState
+
+                APSState.get_instance().remove_order(order_id)
                 return True
         return False
 

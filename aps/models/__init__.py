@@ -1,5 +1,6 @@
 """Models module"""
 
+from aps.models.calendar import MaintenanceWindow, ProductionCalendar, Shift
 from aps.models.constraint import (
     DEFAULT_CHANGEOVER_RULES,
     ChangeoverRule,
@@ -25,4 +26,5 @@ __all__ = [
     "Constraint", "ChangeoverRule", "ProductionConstraints", "DEFAULT_CHANGEOVER_RULES",
     "TaskAssignment", "TaskStatus", "ScheduleResult", "ScheduleExplanation",
     "OptimizationParams", "OptimizationStrategy", "ObjectiveWeights",
+    "Shift", "MaintenanceWindow", "ProductionCalendar",
 ]

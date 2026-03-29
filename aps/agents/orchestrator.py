@@ -10,6 +10,7 @@
 7. Monitor - 实时监控
 """
 
+import uuid
 from enum import Enum
 
 from pydantic import BaseModel, Field
@@ -84,6 +85,15 @@ class APSSystem:
         self._last_validation: ValidationResult | None = None
         self._adjustment_count: int = 0
         self._max_adjustments: int = 3
+
+        # 同步到全局状态
+        from aps.core.state import APSState
+
+        state = APSState.get_instance()
+        state.set_orders(orders)
+        state.set_machines(machines)
+        if constraints:
+            state.set_constraints(constraints)
 
     async def process_request(
         self, user_input: str, params: OptimizationParams | None = None
@@ -166,7 +176,13 @@ class APSSystem:
 
     async def _execute_schedule(self, params: OptimizationParams) -> ScheduleResult:
         """执行排产"""
-        return self.scheduler.run_optimization(params)
+        result = self.scheduler.run_optimization(params)
+
+        from aps.core.state import APSState
+
+        state = APSState.get_instance()
+        state.set_schedule(result, f"sys-{uuid.uuid4().hex[:8]}")
+        return result
 
     async def _explain_result(
         self, user_input: str, result: ScheduleResult, params: OptimizationParams
@@ -239,8 +255,13 @@ class APSSystem:
         return recs
 
     async def _validate_result(self, result: ScheduleResult) -> ValidationResult:
-        """验证排程结果"""
-        return await self.validator.validate(result)
+        """验证排程结果 — 使用确定性校验"""
+        return self.validator.validate_deterministic(
+            result,
+            orders=self.orders,
+            machines=self.machines,
+            constraints=self.constraints,
+        )
 
     async def _adjust_if_needed(
         self, result: ScheduleResult, validation: ValidationResult

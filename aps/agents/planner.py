@@ -29,12 +29,8 @@ class PlannerOutput(BaseModel):
     strategy: OptimizationStrategy = Field(
         default=OptimizationStrategy.BALANCED, description="优化策略"
     )
-    on_time: float = Field(
-        default=0.4, ge=0.0, le=1.0, description="准时交付权重 on_time"
-    )
-    changeover: float = Field(
-        default=0.2, ge=0.0, le=1.0, description="最小换产权重 changeover"
-    )
+    on_time: float = Field(default=0.4, ge=0.0, le=1.0, description="准时交付权重 on_time")
+    changeover: float = Field(default=0.2, ge=0.0, le=1.0, description="最小换产权重 changeover")
     utilization: float = Field(
         default=0.2, ge=0.0, le=1.0, description="设备利用率权重 utilization"
     )
@@ -42,12 +38,8 @@ class PlannerOutput(BaseModel):
     time_limit_seconds: int = Field(default=60, description="求解时间限制")
     allow_delays: bool = Field(default=True, description="是否允许延期")
     max_delay_hours: float = Field(default=24.0, description="最大延期小时数")
-    priority_orders: list[str] = Field(
-        default_factory=list, description="优先处理的订单ID"
-    )
-    frozen_assignments: list[str] = Field(
-        default_factory=list, description="冻结的分配（不调整）"
-    )
+    priority_orders: list[str] = Field(default_factory=list, description="优先处理的订单ID")
+    frozen_assignments: list[str] = Field(default_factory=list, description="冻结的分配（不调整）")
     explanation: str = Field(default="", description="规划决策说明")
 
     @model_validator(mode="before")
@@ -118,7 +110,7 @@ class PlannerAgent(BaseAPSAgent):
 - "交期"、"准时"、"不延误" → ON_TIME_DELIVERY策略
 - "换产"、"清洗"、"切换" → MINIMIZE_CHANGEOVER策略
 - "利润"、"收益" → MAXIMIZE_PROFIT策略
-- "产能"、"利用率" → MAXIMIZE_UTILIZATION策略
+- "产能"、"利用率" → MAX_UTILIZATION策略
 - 没有明确偏好 → BALANCED策略
 
 **设置权重**：
@@ -132,13 +124,106 @@ class PlannerAgent(BaseAPSAgent):
 - explanation: 简要说明决策理由
 """
 
-    async def run(
-        self, user_input: str, context: AgentContext | None = None
-    ) -> PlannerOutput:
-        """运行规划Agent"""
-        prompt = self._build_prompt(user_input, context)
-        result = await self.agent.run(prompt)
-        return cast(PlannerOutput, result.output)
+    _STRATEGY_KEYWORDS: dict[OptimizationStrategy, list[str]] = {
+        OptimizationStrategy.ON_TIME_DELIVERY: [
+            "交期",
+            "准时",
+            "不延误",
+            "截止",
+            "按时",
+        ],
+        OptimizationStrategy.MINIMIZE_CHANGEOVER: [
+            "换产",
+            "清洗",
+            "切换",
+            "最少换产",
+            "减少切换",
+        ],
+        OptimizationStrategy.MAXIMIZE_PROFIT: [
+            "利润",
+            "收益",
+            "赚钱",
+            "最大利润",
+        ],
+        OptimizationStrategy.MAX_UTILIZATION: [
+            "产能",
+            "利用率",
+            "满载",
+            "最大化产能",
+        ],
+    }
+
+    async def run(self, user_input: str, context: AgentContext | None = None) -> PlannerOutput:
+        """运行规划Agent — 关键词匹配优先，LLM 后备"""
+        keyword_result = self._match_keywords(user_input)
+        if keyword_result is not None:
+            return keyword_result
+
+        try:
+            prompt = self._build_prompt(user_input, context)
+            result = await self.agent.run(prompt)
+            return cast(PlannerOutput, result.output)
+        except Exception:
+            return PlannerOutput()
+
+    def _match_keywords(self, user_input: str) -> PlannerOutput | None:
+        """关键词匹配策略（确定性，不调用 LLM）"""
+        text = user_input.lower()
+        for strategy, keywords in self._STRATEGY_KEYWORDS.items():
+            if any(kw in text for kw in keywords):
+                weights = self._default_weights_for(strategy)
+                return PlannerOutput(
+                    strategy=strategy,
+                    on_time=weights.on_time,
+                    changeover=weights.changeover,
+                    utilization=weights.utilization,
+                    profit=weights.profit,
+                    explanation=f"关键词匹配策略: {strategy.value}",
+                )
+        return None
+
+    @staticmethod
+    def _default_weights_for(
+        strategy: OptimizationStrategy,
+    ) -> ObjectiveWeights:
+        """根据策略返回默认权重"""
+        presets: dict[OptimizationStrategy, dict] = {
+            OptimizationStrategy.ON_TIME_DELIVERY: dict(
+                on_time=0.6,
+                changeover=0.1,
+                utilization=0.2,
+                profit=0.1,
+            ),
+            OptimizationStrategy.MINIMIZE_CHANGEOVER: dict(
+                on_time=0.2,
+                changeover=0.6,
+                utilization=0.1,
+                profit=0.1,
+            ),
+            OptimizationStrategy.MAXIMIZE_PROFIT: dict(
+                on_time=0.2,
+                changeover=0.1,
+                utilization=0.1,
+                profit=0.6,
+            ),
+            OptimizationStrategy.MAX_UTILIZATION: dict(
+                on_time=0.1,
+                changeover=0.1,
+                utilization=0.6,
+                profit=0.2,
+            ),
+        }
+        return ObjectiveWeights(
+            **presets.get(
+                strategy,
+                dict(
+                    on_time=0.4,
+                    changeover=0.2,
+                    utilization=0.2,
+                    profit=0.2,
+                ),
+            )
+        )
 
     def _build_prompt(self, user_input: str, context: AgentContext | None) -> str:
         """构建提示"""

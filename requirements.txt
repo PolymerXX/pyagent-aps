@@ -3,6 +3,10 @@
 #
 # Windows：不要 pip install hindsight-all。它会拉取 hindsight-api-slim[all] → uvloop，
 # 而 uvloop 不支持 Windows，会导致构建失败。写 Agent/客户端脚本请用下面两行即可。
+#
+# mcp_server.py：mcp（FastMCP）、e2b-code-interpreter、hindsight-pydantic-ai
+mcp>=1.0
+e2b-code-interpreter>=1.0
 pydantic-ai>=0.0.10
 python-dotenv>=1.0
 hindsight-pydantic-ai>=0.4

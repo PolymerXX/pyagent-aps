@@ -23,6 +23,8 @@ class TaskAssignment(BaseModel):
     status: TaskStatus = Field(default=TaskStatus.PLANNED, description="任务状态")
     is_on_time: bool = Field(default=True, description="是否按时完成")
     delay_hours: float = Field(default=0.0, description="延期小时数")
+    parent_order_id: str | None = Field(default=None, description="拆分来源订单ID（None表示未拆分）")
+    split_index: int = Field(default=0, ge=0, description="拆分段索引（0=未拆分或第1段）")
 
     @property
     def duration(self) -> float:
